@@ -21,6 +21,6 @@ pub trait SolutionStore<P: Problem>: Send {
 }
 
 pub trait Solution {
-    fn distance(&self, s: Self::Solution) -> f64;
+    fn weight(&self, s: Self::Solution) -> f64;
     fn iteration(&self, s: Self::Solution) -> Iteration;
 }
