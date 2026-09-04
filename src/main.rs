@@ -1,6 +1,7 @@
 mod heuristics;
 
 use std::collections::HashMap;
+use std::fs;
 
 use clap::Parser;
 
@@ -32,6 +33,9 @@ struct Args {
 
     #[arg(short, long, default_value_t = 10000)]
     max_lots: usize,
+
+    #[arg(long)]
+    db_path: Option<String>,
 }
 
 fn parse_instance(arg: &str, cities: &[City]) -> Result<Vec<usize>, String> {
@@ -57,15 +61,13 @@ fn parse_instance(arg: &str, cities: &[City]) -> Result<Vec<usize>, String> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let mut client = db::connect()?;
-    let cities: Vec<City> = db::load_all(&mut client)?;
-    let connections: Vec<Connection> = db::load_all(&mut client)?;
-
+    let connection = db::connect(args.db_path)?;
+    let cities: Vec<City> = db::load_all(&connection)?;
+    let connections: Vec<Connection> = db::load_all(&connection)?;
     let instance: Vec<usize> = match &args.instance {
         Some(arg) => parse_instance(arg, &cities)?,
         None => (0..cities.len()).collect(),
     };
-
     let tour = Tour::new(cities, instance, connections, args.seed);
     println!("Maximum {:.9}", tour.max_distance);
     println!("Normalizer {:.9}", tour.normalizer);

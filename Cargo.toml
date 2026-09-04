@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-postgres = "0.19.14"
 rand = "0.10.2"
 clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }

@@ -1,4 +1,4 @@
-use postgres::Row;
+use rusqlite::{Error, Row};
 
 use super::super::db::FromRow;
 
@@ -43,14 +43,14 @@ impl FromRow for City {
     const QUERY: &'static str =
         "SELECT id, name, country, population, latitude, longitude FROM cities ORDER BY id";
 
-    fn from_row(row: &Row) -> City {
-        City {
-            id: row.get("id"),
-            name: row.get("name"),
-            country: row.get("country"),
-            population: row.get("population"),
-            lat: row.get("latitude"),
-            long: row.get("longitude"),
-        }
+    fn from_row(row: &Row) -> Result<City, Error> {
+        Ok(City {
+            id: row.get("id")?,
+            name: row.get("name")?,
+            country: row.get("country")?,
+            population: row.get("population")?,
+            lat: row.get("latitude")?,
+            long: row.get("longitude")?,
+        })
     }
 }
