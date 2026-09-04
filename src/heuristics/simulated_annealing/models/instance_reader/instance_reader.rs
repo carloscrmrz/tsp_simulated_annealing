@@ -1,0 +1,70 @@
+use std::collections::HashMap;
+use super::super::city::City;
+use super::Args;
+
+use std::fs;
+
+
+pub struct InstanceReader {
+    raw_instance: Option<String>,
+    path_to_instance: Option<String>,
+}
+impl InstanceReader {
+    pub fn new(args: &Args) -> InstanceReader {
+        if args.instance.is_some() {
+            return InstanceReader {
+                raw_instance: Some(args.instance.as_ref().unwrap().to_string()),
+                path_to_instance: None,
+            }
+        } else if args.instance_path.is_some() {
+            return InstanceReader {
+                path_to_instance: Some(args.instance_path.as_ref().unwrap().to_string()),
+                raw_instance: None,
+            }
+        }
+        panic!("No instance specified");
+    }
+
+    pub fn get_parsed_instance(&self, cities: &[City]) -> Vec<usize> {
+        match (self.path_to_instance.as_ref(), self.raw_instance.as_ref()) {
+            (Some(path_to_instance), Some(raw_instance)) => { vec![] } // temp, while I create a better error system
+            (Some(path_to_instance), None) => {
+                let raw_str = fs::read_to_string(path_to_instance);
+                if raw_str.is_err() { return vec![]; }
+                let parsed_result = InstanceReader::parse_instance(&raw_str.unwrap(), &cities);
+                return match parsed_result {
+                    Ok(parsed_result) => { parsed_result }
+                    _ => { vec![] }
+                }
+            }
+            (None, Some(raw_instance)) => {
+                let parsed_result = InstanceReader::parse_instance(&raw_instance, &cities);
+                return match parsed_result {
+                    Ok(parsed_result) => { parsed_result }
+                    _ => { vec![] }
+                }
+            }
+            (None, None) => { vec![] } // temp, while I create a better error system
+        }
+    }
+
+    fn parse_instance(arg: &str, cities: &[City]) -> Result<Vec<usize>, String> {
+        let index_by_id: HashMap<i32, usize> = cities
+            .iter()
+            .enumerate()
+            .map(|(idx, city)| (city.id, idx))
+            .collect();
+
+        arg.split(',')
+            .map(str::trim)
+            .filter(|token| !token.is_empty())
+            .map(|token| {
+                let id: i32 = token.parse().map_err(|_| format!("invalid city id: {token:?}"))?;
+                index_by_id
+                    .get(&id)
+                    .copied()
+                    .ok_or_else(|| format!("city id {id} not found"))
+            })
+            .collect()
+    }
+}

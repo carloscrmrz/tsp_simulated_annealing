@@ -10,7 +10,7 @@ pub struct Tour {
     pub max_distance: f64,
 
     rand: StdRng,
-    rng_seed: u64,
+    pub rng_seed: u64,
 
     pub current_solution: Vec<usize>,
     current_cost: f64,
@@ -202,4 +202,6 @@ impl Tour {
     pub fn resync_cost(&mut self) {
         self.current_cost = self.calculate_current_cost();
     }
+
+    pub fn get_rng_seed(&self) -> u64 { self.rng_seed }
 }

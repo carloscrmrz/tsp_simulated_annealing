@@ -95,4 +95,6 @@ impl TravelSalesmanProblem {
     pub fn best_cost(&self) -> f64 {
         self.minimal_cost
     }
+
+    pub fn rng_seed(&self) -> u64 { self.tour.get_rng_seed() }
 }
