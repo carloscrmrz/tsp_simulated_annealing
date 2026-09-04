@@ -2,14 +2,16 @@ mod heuristics;
 
 use clap::Parser;
 
+use heuristics::simulated_annealing::io::{
+    args::Args,
+    instance_reader::InstanceReader,
+};
 use heuristics::simulated_annealing::models::{
     city::City,
     connection::Connection,
     db,
     problem::TravelSalesmanProblem,
     solution::Tour,
-    instance_reader::InstanceReader,
-    instance_reader::Args,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

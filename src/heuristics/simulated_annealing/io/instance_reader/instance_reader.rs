@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use super::super::city::City;
-use super::Args;
+use super::super::args::Args;
+use crate::heuristics::simulated_annealing::models::city::City;
 
 use std::fs;
 
@@ -27,7 +27,7 @@ impl InstanceReader {
 
     pub fn get_parsed_instance(&self, cities: &[City]) -> Vec<usize> {
         match (self.path_to_instance.as_ref(), self.raw_instance.as_ref()) {
-            (Some(path_to_instance), Some(raw_instance)) => { vec![] } // temp, while I create a better error system
+            (Some(_path_to_instance), Some(_raw_instance)) => { vec![] } // temp, while I create a better error system
             (Some(path_to_instance), None) => {
                 let raw_str = fs::read_to_string(path_to_instance);
                 if raw_str.is_err() { return vec![]; }
