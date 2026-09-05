@@ -1,21 +1,23 @@
 use std::fs;
 use std::path::Path;
 
+use chrono::{DateTime, Local};
+
 use crate::heuristics::simulated_annealing::models::city::City;
 use crate::heuristics::simulated_annealing::models::problem::TravelSalesmanProblem;
 
-pub struct InstanceWriter {
-    cities: Vec<City>,
-    instance: Vec<usize>,
+pub struct InstanceWriter<'a> {
+    cities: &'a [City],
+    instance: &'a [usize],
     path_to_output: Option<String>,
 }
 
-impl InstanceWriter {
+impl<'a> InstanceWriter<'a> {
     pub fn new(
-        cities: Vec<City>,
-        instance: Vec<usize>,
+        cities: &'a [City],
+        instance: &'a [usize],
         path_to_output: Option<String>,
-    ) -> InstanceWriter {
+    ) -> InstanceWriter<'a> {
         InstanceWriter {
             cities,
             instance,
@@ -23,8 +25,15 @@ impl InstanceWriter {
         }
     }
 
-    /// The instance as it was read in, rendered as city ids in their original
-    /// order.
+    pub fn output_file_name(index: usize, at: &DateTime<Local>) -> String {
+        format!(
+            "./results/output-{:04}-{}{:02}.out",
+            index,
+            at.format("%d%m-%Y-%H%M-%S"),
+            at.timestamp_subsec_millis() / 10
+        )
+    }
+
     pub fn format_instance(&self) -> Result<String, String> {
         let ids: Result<Vec<String>, String> = self
             .instance
