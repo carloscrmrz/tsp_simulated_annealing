@@ -2,14 +2,17 @@ mod heuristics;
 
 use clap::Parser;
 
+use heuristics::simulated_annealing::io::{
+    args::Args,
+    instance_reader::InstanceReader,
+    instance_writer::InstanceWriter,
+};
 use heuristics::simulated_annealing::models::{
     city::City,
     connection::Connection,
     db,
     problem::TravelSalesmanProblem,
     solution::Tour,
-    instance_reader::InstanceReader,
-    instance_reader::Args,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,23 +23,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cities: Vec<City> = db::load_all(&connection)?;
     let connections: Vec<Connection> = db::load_all(&connection)?;
     let instance: Vec<usize> = instance_reader.get_parsed_instance(&cities);
-    let tour = Tour::new(cities, instance, connections, args.seed);
+    let tour = Tour::new(&cities, &instance, &connections, args.seed);
 
-    println!("Maximum {:.9}", tour.max_distance);
-    println!("Normalizer {:.9}", tour.normalizer);
-    println!("Initial evaluation {:.12}", tour.calculate_current_cost());
-
+    let instance_writer = InstanceWriter::new(cities, instance, Some(String::from("./results/output.txt")));
     let mut tsp = TravelSalesmanProblem::new(tour, args.temperature, args.decay_factor);
-
     tsp.accept_solutions();
 
-    println!(
-        "best cost {:.12}, feasible? {}",
-        tsp.best_cost(),
-        tsp.best_cost() < 1.0
-    );
-    println!("best solution {:?}", tsp.best_solution());
-    println!("seed {:?}", tsp.rng_seed());
-
+    instance_writer.write_instance(&tsp)?;
     Ok(())
 }

@@ -36,7 +36,7 @@ fn sample_tour(seed: u64) -> Tour {
         conn(4, 5, 2_000_000.0),
     ];
     let instance: Vec<usize> = (0..cities.len()).collect();
-    Tour::new(cities, instance, connections, Some(seed))
+    Tour::new(&cities, &instance, &connections, Some(seed))
 }
 
 #[test]
