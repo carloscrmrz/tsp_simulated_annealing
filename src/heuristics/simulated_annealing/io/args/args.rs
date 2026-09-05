@@ -26,4 +26,7 @@ pub struct Args {
 
     #[arg(long)]
     pub db_path: Option<String>,
+
+    #[arg(short('c'), long)]
+    pub threads: Option<usize>,
 }
