@@ -31,7 +31,7 @@ impl TravelSalesmanProblem {
             while p <= q {
                 q = p;
                 let best_before = self.minimal_cost;
-                let (average, accepted) = self.calculate_lot(1000);
+                let (average, accepted) = self.calculate_batch(1000);
                 if accepted == 0 {
                     return;
                 }
@@ -49,7 +49,7 @@ impl TravelSalesmanProblem {
         self.minimal_cost < 1.0
     }
 
-    pub fn calculate_lot(&mut self, size_lot: usize) -> (f64, usize) {
+    pub fn calculate_batch(&mut self, size_lot: usize) -> (f64, usize) {
         let max_attempts = size_lot.saturating_mul(100);
         let mut accepted = 0;
         let mut cost_sum = 0.0;
