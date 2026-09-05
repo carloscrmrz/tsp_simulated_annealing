@@ -24,18 +24,18 @@ fn tri_index(n: usize, i: usize, j: usize) -> usize {
 
 impl Tour {
     pub fn new(
-        cities: Vec<City>,
-        instance: Vec<usize>,
-        connections: Vec<Connection>,
+        cities: &[City],
+        instance: &[usize],
+        connections: &[Connection],
         rng_seed: Option<u64>
     ) -> Tour {
         let seed = rng_seed.unwrap_or_else(|| rand::random::<u64>());
-        let sub_connections = Self::_build_sub_connections(&cities, &instance, &connections);
+        let sub_connections = Self::_build_sub_connections(cities, instance, connections);
 
         let max_distance: f64 = Self::_calculate_max_distance(&sub_connections);
         let normalizer: f64 = Self::_calculate_normalizer(&sub_connections, instance.len());
         let augmented_weight_matrix: Vec<f64> =
-            Self::_build_weight_matrix(&cities, &instance, &sub_connections);
+            Self::_build_weight_matrix(cities, instance, &sub_connections);
 
         let current_solution: Vec<usize> = (0..instance.len()).collect();
 
