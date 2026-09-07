@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use rand::{SeedableRng, rngs::StdRng, RngExt};
 
 use super::super::city::City;
@@ -59,13 +59,19 @@ impl Tour {
         instance: &[usize],
         connections: &[Connection],
     ) -> Vec<Connection> {
-        let instance_ids: HashSet<i32> = instance.iter().map(|&i| cities[i].id).collect();
+        let instance_cities: HashMap<i32, &City> =
+            instance.iter().map(|&i| (cities[i].id, &cities[i])).collect();
         connections
             .iter()
-            .filter(|conn| {
-                instance_ids.contains(&conn.id_city_1) && instance_ids.contains(&conn.id_city_2)
+            .filter_map(|conn| {
+                let city_1 = instance_cities.get(&conn.id_city_1)?;
+                let city_2 = instance_cities.get(&conn.id_city_2)?;
+                Some(Connection {
+                    id_city_1: conn.id_city_1,
+                    id_city_2: conn.id_city_2,
+                    distance: city_1.distance_to_city(city_2),
+                })
             })
-            .cloned()
             .collect()
     }
 
