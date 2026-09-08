@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use rand::{SeedableRng, rngs::StdRng, RngExt};
+use rand::{SeedableRng, rngs::StdRng, seq::SliceRandom, RngExt};
 
 use super::super::city::City;
 use super::super::connection::Connection;
@@ -37,14 +37,16 @@ impl Tour {
         let augmented_weight_matrix: Vec<f64> =
             Self::_build_weight_matrix(cities, instance, &sub_connections);
 
-        let current_solution: Vec<usize> = (0..instance.len()).collect();
+        let mut rand = StdRng::seed_from_u64(seed);
+        let mut current_solution: Vec<usize> = (0..instance.len()).collect();
+        current_solution.shuffle(&mut rand);
 
         let mut tour = Tour {
             augmented_weight_matrix,
             normalizer,
             max_distance,
             current_solution,
-            rand: StdRng::seed_from_u64(seed),
+            rand,
             rng_seed: seed,
             solution_last_move: (0, 0),
             solution_last_delta: 0.0,

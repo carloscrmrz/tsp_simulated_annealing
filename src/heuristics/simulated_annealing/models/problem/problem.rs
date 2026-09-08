@@ -31,12 +31,12 @@ impl TravelSalesmanProblem {
             while p <= q {
                 q = p;
                 let best_before = self.minimal_cost;
-                let (average, accepted) = self.calculate_batch(1000);
+                let (average, accepted) = self.calculate_batch(4000);
                 if accepted == 0 {
                     return;
                 }
                 p = average;
-                if self.minimal_cost < best_before {
+                if self.minimal_cost < best_before + self.temperature {
                     self.accepted_solutions.push(self.minimal_solution.clone());
                 }
                 self.tour.resync_cost();
@@ -94,6 +94,10 @@ impl TravelSalesmanProblem {
 
     pub fn best_cost(&self) -> f64 {
         self.minimal_cost
+    }
+
+    pub fn accepted_solutions(&self) -> &[Vec<usize>] {
+        &self.accepted_solutions
     }
 
     pub fn rng_seed(&self) -> u64 { self.tour.get_rng_seed() }

@@ -10,6 +10,7 @@ pub struct InstanceWriter<'a> {
     cities: &'a [City],
     instance: &'a [usize],
     path_to_output: Option<String>,
+    tsp: &'a TravelSalesmanProblem,
 }
 
 impl<'a> InstanceWriter<'a> {
@@ -17,11 +18,13 @@ impl<'a> InstanceWriter<'a> {
         cities: &'a [City],
         instance: &'a [usize],
         path_to_output: Option<String>,
+        tsp: &'a TravelSalesmanProblem,
     ) -> InstanceWriter<'a> {
         InstanceWriter {
             cities,
             instance,
             path_to_output,
+            tsp
         }
     }
 
@@ -32,6 +35,13 @@ impl<'a> InstanceWriter<'a> {
             at.format("%d%m-%Y-%H%M-%S"),
             at.timestamp_subsec_millis() / 10
         )
+    }
+
+    pub fn solutions_file_name(path_to_output: &str) -> String {
+        Path::new(path_to_output)
+            .with_extension("sol")
+            .to_string_lossy()
+            .into_owned()
     }
 
     pub fn format_instance(&self) -> Result<String, String> {
@@ -87,8 +97,20 @@ impl<'a> InstanceWriter<'a> {
         ))
     }
 
-    pub fn write_instance(&self, tsp: &TravelSalesmanProblem) -> Result<(), String> {
-        let report = self.format_report(tsp)?;
+    pub fn format_solutions(&self) -> String {
+        let gnu_plot_cmd = String::from("plot '-' using 1:2 with linespoints\n");
+        let mut solutions = String::from("set datafile separator ','\n");
+        solutions.push_str(&gnu_plot_cmd);
+        for (iteration, solution) in self.tsp.accepted_solutions().iter().enumerate() {
+            let cost = self.tsp.tour.calculate_cost(solution);
+            solutions.push_str(&format!("{iteration},{cost:.9}\n"));
+        }
+
+        solutions
+    }
+
+    pub fn write_instance(&self) -> Result<(), String> {
+        let report = self.format_report(self.tsp)?;
         print!("{report}");
 
         match self.path_to_output.as_ref() {
@@ -96,7 +118,9 @@ impl<'a> InstanceWriter<'a> {
                 if let Some(parent) = Path::new(path_to_output).parent() {
                     fs::create_dir_all(parent).map_err(|err| err.to_string())?;
                 }
-                fs::write(path_to_output, report).map_err(|err| err.to_string())
+                fs::write(path_to_output, report).map_err(|err| err.to_string())?;
+                fs::write(Self::solutions_file_name(path_to_output), self.format_solutions())
+                    .map_err(|err| err.to_string())
             }
             None => Ok(()),
         }

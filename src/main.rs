@@ -36,12 +36,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 scope.spawn(move || {
                     let tour = Tour::new(cities, instance, connections, args.seed);
                     let file_output_name = InstanceWriter::output_file_name(i, &started_at);
-                    let instance_writer =
-                        InstanceWriter::new(cities, instance, Some(file_output_name));
                     let mut tsp =
                         TravelSalesmanProblem::new(tour, args.temperature, args.decay_factor);
                     tsp.accept_solutions();
-                    instance_writer.write_instance(&tsp)
+
+                    let instance_writer =
+                        InstanceWriter::new(cities, instance, Some(file_output_name), &tsp);
+                    instance_writer.write_instance()
                 })
             })
             .collect();
