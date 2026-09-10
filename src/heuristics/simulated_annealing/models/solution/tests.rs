@@ -68,3 +68,30 @@ fn undo_restores_solution_and_cost() {
     assert_eq!(tour.current_solution, solution_before);
     assert!((tour.current_cost() - cost_before).abs() < 1e-7);
 }
+
+#[test]
+fn swap_delta_matches_full_recompute_and_is_side_effect_free() {
+    let mut tour = sample_tour(7);
+    let n = tour.current_solution.len();
+
+    for p in 0..n {
+        for q in (p + 1)..n {
+            let before_solution = tour.current_solution.clone();
+            let before_cost = tour.current_cost();
+
+            let delta = tour.swap_delta(p, q);
+
+            assert_eq!(tour.current_solution, before_solution);
+            assert!((tour.current_cost() - before_cost).abs() < 1e-12);
+
+            let mut swapped = before_solution.clone();
+            swapped.swap(p, q);
+            let expected = tour.calculate_cost(&swapped) - before_cost;
+            assert!(
+                (delta - expected).abs() < 1e-9,
+                "swap({p},{q}): delta {delta} vs expected {expected}"
+            );
+        }
+    }
+}
+

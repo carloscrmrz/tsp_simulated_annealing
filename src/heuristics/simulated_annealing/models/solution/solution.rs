@@ -161,6 +161,13 @@ impl Tour {
         if b >= a {
             b += 1;
         }
+        self.apply_move(a, b)
+    }
+
+    pub fn apply_move(&mut self, a: usize, b: usize) -> f64 {
+        if a == b || self.current_solution.len() < 2 {
+            return 0.0;
+        }
         let (p, q) = if a < b { (a, b) } else { (b, a) };
 
         let before = self.incident_cost(p, q);
@@ -172,6 +179,36 @@ impl Tour {
         self.solution_last_move = (p, q);
         self.solution_last_delta = delta;
         delta
+    }
+
+    pub fn swap_delta(&mut self, p: usize, q: usize) -> f64 {
+        if p == q {
+            return 0.0;
+        }
+        let (p, q) = if p < q { (p, q) } else { (q, p) };
+
+        let before = self.incident_cost(p, q);
+        self.current_solution.swap(p, q);
+        let after = self.incident_cost(p, q);
+        self.current_solution.swap(p, q);
+
+        (after - before) / self.normalizer
+    }
+
+    pub fn best_swap(&mut self) -> Option<(usize, usize, f64)> {
+        let n = self.current_solution.len();
+        let mut best: Option<(usize, usize, f64)> = None;
+
+        for p in 0..n {
+            for q in (p + 1)..n {
+                let delta = self.swap_delta(p, q);
+                if delta < 0.0 && best.is_none_or(|(_, _, best_delta)| delta < best_delta) {
+                    best = Some((p, q, delta));
+                }
+            }
+        }
+
+        best
     }
 
     pub fn undo_move(&mut self) {

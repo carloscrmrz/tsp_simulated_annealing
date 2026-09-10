@@ -26,32 +26,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let connections: Vec<Connection> = db::load_all(&connection)?;
     let instance: Vec<usize> = instance_reader.get_parsed_instance(&cities);
 
-    let n_threads = args.threads.unwrap_or_else(|| 1);
+    let n_runs = args.threads.unwrap_or_else(|| 1);
+    let concurrency = args
+        .concurrency
+        .unwrap_or_else(|| thread::available_parallelism().map(|n| n.get()).unwrap_or(1))
+        .max(1);
     let started_at = Local::now();
     let (cities, instance, connections) = (&cities, &instance, &connections);
 
-    let results: Vec<Result<(), String>> = thread::scope(|scope| {
-        let handles: Vec<_> = (0..n_threads)
-            .map(|i| {
-                scope.spawn(move || {
-                    let tour = Tour::new(cities, instance, connections, args.seed);
-                    let file_output_name = InstanceWriter::output_file_name(i, &started_at);
-                    let mut tsp =
-                        TravelSalesmanProblem::new(tour, args.temperature, args.decay_factor);
-                    tsp.accept_solutions();
+    let mut results: Vec<Result<(), String>> = Vec::with_capacity(n_runs);
 
-                    let instance_writer =
-                        InstanceWriter::new(cities, instance, Some(file_output_name), &tsp);
-                    instance_writer.write_instance()
+    for batch in (0..n_runs).collect::<Vec<usize>>().chunks(concurrency) {
+        let batch_results: Vec<Result<(), String>> = thread::scope(|scope| {
+            let handles: Vec<_> = batch
+                .iter()
+                .map(|&i| {
+                    scope.spawn(move || {
+                        let tour = Tour::new(cities, instance, connections, args.seed);
+                        let file_output_name = InstanceWriter::output_file_name(i, &started_at);
+                        let mut tsp = TravelSalesmanProblem::new(
+                            tour,
+                            args.temperature,
+                            args.decay_factor,
+                            args.epsilon,
+                            args.lot_size
+                        );
+                        tsp.accept_solutions();
+
+                        if args.activate_sweep {
+                            tsp.descend();
+                        }
+
+                        let instance_writer =
+                            InstanceWriter::new(cities, instance, Some(file_output_name), &tsp);
+                        instance_writer.write_instance()
+                    })
                 })
-            })
-            .collect();
+                .collect();
 
-        handles
-            .into_iter()
-            .map(|handle| handle.join().expect("solver thread panicked"))
-            .collect()
-    });
+            handles
+                .into_iter()
+                .map(|handle| handle.join().expect("solver thread panicked"))
+                .collect()
+        });
+
+        results.extend(batch_results);
+    }
 
     for result in results {
         result?;

@@ -8,10 +8,12 @@ pub struct TravelSalesmanProblem {
     accepted_solutions: Vec<Vec<usize>>,
     minimal_solution: Vec<usize>,
     minimal_cost: f64,
+    batch_size: usize,
+    epsilon: f64,
 }
 
 impl TravelSalesmanProblem {
-    pub fn new(tour: Tour, temperature: f64, decay_factor: f64) -> TravelSalesmanProblem {
+    pub fn new(tour: Tour, temperature: f64, decay_factor: f64, epsilon: f64, batch_size: usize) -> TravelSalesmanProblem {
         let initial_solution = tour.current_solution.clone();
         let minimal_cost = tour.current_cost();
         TravelSalesmanProblem {
@@ -21,17 +23,19 @@ impl TravelSalesmanProblem {
             accepted_solutions: vec![initial_solution.clone()],
             minimal_solution: initial_solution,
             minimal_cost,
+            batch_size,
+            epsilon,
         }
     }
 
     pub fn accept_solutions(&mut self) {
         let mut p = 0.0;
-        while self.temperature > 1e-10 {
+        while self.temperature > self.epsilon {
             let mut q = f64::INFINITY;
             while p <= q {
                 q = p;
                 let best_before = self.minimal_cost;
-                let (average, accepted) = self.calculate_batch(4000);
+                let (average, accepted) = self.calculate_batch(self.batch_size);
                 if accepted == 0 {
                     return;
                 }
@@ -101,4 +105,31 @@ impl TravelSalesmanProblem {
     }
 
     pub fn rng_seed(&self) -> u64 { self.tour.get_rng_seed() }
+
+    pub fn do_downhill_sweep(&mut self) -> bool {
+        let Some((p, q, _)) = self.tour.best_swap() else {
+            return false;
+        };
+
+        self.tour.apply_move(p, q);
+        let cost = self.tour.current_cost();
+        self.accepted_solutions.push(self.tour.current_solution.clone());
+
+        if cost < self.minimal_cost {
+            self.minimal_cost = cost;
+            self.minimal_solution.clone_from(&self.tour.current_solution);
+        }
+
+        true
+    }
+
+    pub fn descend(&mut self) -> usize {
+        let mut moves = 0;
+        while self.do_downhill_sweep() {
+            moves += 1;
+        }
+        self.tour.resync_cost();
+        self.minimal_cost = self.minimal_cost.min(self.tour.current_cost());
+        moves
+    }
 }

@@ -21,6 +21,9 @@ pub struct Args {
     #[arg(short, long, default_value_t = 5000)]
     pub lot_size: usize,
 
+    #[arg(short, long, default_value_t = 0.000000001_f64)]
+    pub epsilon: f64,
+
     #[arg(short, long, default_value_t = 10000)]
     pub max_lots: usize,
 
@@ -29,4 +32,10 @@ pub struct Args {
 
     #[arg(short('c'), long)]
     pub threads: Option<usize>,
+
+    #[arg(short('j'), long)]
+    pub concurrency: Option<usize>,
+
+    #[arg(long)]
+    pub activate_sweep: bool,
 }
