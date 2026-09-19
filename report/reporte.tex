@@ -1,0 +1,358 @@
+\documentclass[11pt,letterpaper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{siunitx}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{figuras/}}
+
+% \figura{file}{width}: include the image if it exists, else a placeholder.
+\newcommand{\figura}[2]{%
+  \IfFileExists{figuras/#1}{\includegraphics[width=#2]{#1}}{%
+    \fbox{\parbox[c][5cm][c]{#2}{\centering\ttfamily\small
+      TODO: add \texttt{figuras/#1}}}}}
+
+\lstdefinelanguage{Rust}{
+  keywords={fn,let,mut,pub,struct,impl,while,if,else,return,for,in,use,mod,
+            match,self,Self,Some,None,Ok,Err,true,false,continue,break,as},
+  keywordstyle=\color{blue!70!black}\bfseries,
+  ndkeywords={f64,u64,usize,i32,Vec,Option,Result,String,bool},
+  ndkeywordstyle=\color{teal}\bfseries,
+  comment=[l]{//},
+  commentstyle=\color{gray}\itshape,
+  string=[b]",
+  stringstyle=\color{purple},
+  sensitive=true,
+}
+\lstset{
+  language=Rust,
+  basicstyle=\ttfamily\footnotesize,
+  numbers=left, numberstyle=\tiny\color{gray}, numbersep=6pt,
+  frame=single, framerule=0.3pt, rulecolor=\color{gray!50},
+  breaklines=true, showstringspaces=false,
+  columns=fullflexible, keepspaces=true,
+}
+
+\algrenewcommand\algorithmicrequire{\textbf{Input:}}
+\algrenewcommand\algorithmicensure{\textbf{Output:}}
+
+\title{Recocido Simulado por Aceptación por Umbrales \\
+       para resolver el Problema del Viajero}
+\author{Carlos Cabrera Ramirez}
+\date{\today}
+
+% ============================================================================
+\begin{document}
+\maketitle
+
+% ----------------------------------------------------------------------------
+\begin{abstract}
+En este documento presentaremos una implementación hecha en Rust para la heurística de \emph{recocido simulado} en su variante de \emph{aceptación por umbrales} para instancias del problema del viajero (Travelling Salesman Problem) obtenidas de una base de datos con 1,092 ciudades alrededor del mundo, las cuales tienen 123,403 conexiones conocidas. Dado que nuestra gráfica de conexiones no es completa, definimos una función de costo la cual penaliza cualquier arista que no exista en nuestra gráfica original; de igual manera generamos un normalizador que toma en cuenta esto y nos permite identificar cualquier solución como válida cuando su costo es $\leq 1$.
+
+La búsqueda explora el espacio de permutaciones a través del intercambio de dos vértices, el cambio en el costo de estos intercambios se evalua en tiempo constante. Las soluciones a aceptar se obtienen en lotes definidos dinámicamente durante la experimentación, detectando el equilibrio térmico cuando el promedio del costo de las soluciones aceptadas empieza a decelerar su decrecimiento.
+
+Nuestra implementación corre experimentos diferentes de manera paralela y se le puede suplir la opción para terminar cada corrida con un barrido, el cual consiste en buscar a través de todo el vecindario de la solución aceptada por algún vecino cuya función de costo evalua menor que la solución aceptada.
+
+Reportamos soluciones en instancias de 40 y 150 ciudades, obteniendo resultados satisfactorios donde evaluamos la función de costo de 150 ciudades a un mínimo de $0.1365$ y de 40 ciudades a un mínimo de $0.2638$.
+\end{abstract}
+
+% ----------------------------------------------------------------------------
+\section{Introducción}
+El problema del viajero (TSP) es uno de los problemas más estudiados en la optimización combinatoria: dado un conjunto de ciudades y las distancias entre ellas, se debe encontrar la ruta más corta que visita cada una de las ciudades exactamente una vez. El problema fue formalizado y resuelto para instancias de tamaño considerable desde los años 50 \cite{dantzig1954}, y desde entonces se ha vuelto un caso de estudio recurrente en optimización combinatoria. Este problema es NP-duro, por ende, incluso para instancias de tamaño lo suficientemente modera se vuelve impráctico el hecho de enumerar (y explorar!) las $n!$ posibles permutaciones, o resolverlo de manera óptima en un tiempo razonable. Por ello recurrimos a las heurísticas: algoritmos los cuales no nos pueden garantizar un óptimo, pero sí producen buenas soluciones en un rango razonable de tiempo.
+
+Implementamos \emph{recocido simulado} (\emph{simulated annealing}), una metaheurística inspirada en la metalurgía, donde un material se calienta y después se deja enfriar lentamente para reducir sus defectos, propuesta originalmente por Kirkpatrick, Gelatt y Vecchi \cite{kirkpatrick1983} e, independientemente, por Černý \cite{cerny1985} aplicándola específicamente al TSP. Para este análogo, nuestro algoritmo acepta al inicio muchas soluciones que pueden ser peores y progresivamente se vuelve más estricto conforme la temperatura es menor, por ende podemos escapar de óptimos locales al inicio y converger en una buena solución al final.
+
+El lenguaje de programación usado es Rust, se leen tanto las ciudades como sus conexiones de una base de datos en SQLite. Nuestro código se organiza en dos estructuras principales: \texttt{Tour} la cual encapsula la estructura de la solución, siendo esto la solución aceptada, la manera de obtener un vecino, así como la función de costo; por otro lado tenemos \texttt{TravelSalesmanProblem} el cual contiene el bucle del recocido. Nuestra implementación de igual manera hace uso de múltiples hilos para paralelizar el cálculo de múltiples soluciones.
+
+% ----------------------------------------------------------------------------
+\section{Problema}
+\label{sec:problem}
+
+\subsection{Input}
+Nuestra base de datos contiene la tabla \texttt{cities} con 1,092 ciudades y la tabla \texttt{connections} la cual relaciona dos ciudades entre si, esta última tiene 123,403 conexiones las cuales serán las únicas válidas al correr nuestro programa.
+
+Sea $C$ el conjunto de ciudades y $E \subseteq C \times C$ el conjunto de conexiones. La gráfica $G = (C,E)$ \emph{no es completa}, ie existen pares de ciudades las cuales no están conectadas.gráfica
+
+Una \emph{instancia} de nuestro problema es un subconjunto ordenado $I = \{c_1, \dots, c_n\} \subseteq C$ de $n$ ciudades, dadas como una lista separada por comas de los identificadores de las ciudades (en base de datos)
+
+\subsection{Distancia entre ciudades}
+La distancia natural entre dos ciudades $u,v$ esta calculada por la formula de Harversine en una esfera de radio $R = \SI{6373000}{\metre}$:
+\begin{align}
+  h(u, v) &= \sin^2\!\left(\tfrac{\varphi_v - \varphi_u}{2}\right)
+           + \cos\varphi_u \cos\varphi_v
+             \sin^2\!\left(\tfrac{\lambda_v - \lambda_u}{2}\right), \\
+  d(u, v) &= 2R \cdot \operatorname{atan2}\!\left(\sqrt{h(u,v)},\;
+             \sqrt{1 - h(u,v)}\right),
+\end{align}
+
+donde $\varphi$ y $\lambda$ son la latitud y longitud en radianes.
+
+Para no depender en los valores de la tabla \texttt{connections}, nuestra implementación calcula todas las distancias con esta fórmula.
+
+\subsection{Solución y Función de Costo}
+Una solución es una permutación de $S = (s_1, \dots, s_n)$ de las ciudades de la instancia obtenida. Como nuestra gráfica no es completa, es posible que una permutación pueda hacer uso de una arista que no existe, para no descartar un sin fin de posibles soluciones, en vez de descartar la solución lo que haremos será asignarle un peso extremadamente alto, el cual no permitirá considerarlo nunca una solución factible. Para ello definimos la \emph{máxima distancia} de la instancia,
+\begin{equation}
+  d_{\max} = \max \{\, d(u, v) : (u, v) \in E,\; u, v \in I \,\},
+\end{equation}
+
+así como la \emph{función de peso aumentada}
+\begin{equation}
+  w'(u, v) =
+  \begin{cases}
+    d(u, v)               & \text{si } (u, v) \in E, \\
+    d(u, v) \cdot d_{\max} & \text{de otra manera.}
+  \end{cases}
+\end{equation}
+
+Multiplicando por $d_{\max}$ nos garantiza que una arista faltante es mucho más costosa que cualquier arista existente, y dado que el factor por el que multiplicamos es la distancia natural, por ende cualesquiera dos aristas que no pertenezcan a nuestra gráfica serán comparables en tamaño.
+
+Para hacer el costo independiente del tamaño de la instancia, definimos el \emph{normalizador}: la suma de las $n-1$ distancias más grandes (para aristas existentes) en la instancia,
+\begin{equation}
+  N(I) = \sum_{k=1}^{n-1} \ell_k,
+  \qquad \ell_1 \ge \ell_2 \ge \cdots \text{ son las distancias en }
+  \{\, d(u,v) : (u,v) \in E,\; u,v \in I \,\}.
+\end{equation}
+
+Finalmente, la función de costo está definida por
+\begin{equation}
+  f(S) = \frac{1}{N(I)} \sum_{i=1}^{n-1} w'(s_i, s_{i+1}).
+  \label{eq:cost}
+\end{equation}
+
+Cualquier permutación que use solo aristas existentes en nuestra gráfica tendrá $1$ como cota superior del costo (dado que usa $n-1$ vertices, en el peor de los casos siendo los $n-1$ más grandes); cualquier permutación que haga uso de una arista inexistente tendra un costo mayor a $1$. Por ende podemos decir que cualquier permutación cuyo costo es menor o igual a $1$ es \emph{factible}, nuestro objetivo es encontrar la permutación que minimice este costo.
+
+% ----------------------------------------------------------------------------
+\section{Heurística}
+
+\subsection{Recocido Simulado}
+
+El recocido simulado es una heurística de búsqueda local que mantiene una sola solución en memoria. A partir de nuestra solución $s$ se puede generar un \emph{vecindario} $s'$ al intercambiar una arista. Si $s'$ es mejor que $s$ esta primera será aceptada, si es peor será aceptada dependiendo en que tanto empeore ésta con respecto a nuestra solución, ie $f(s') < f(s) + T$ donde $T$ es la temperatura actual del sistema. Esta temperatura iniciará en un valor arbitrario alto y se reducirá al multiplicarse por un factor de enfriamiento $\phi \in (0,1)$, haciendo que peores soluciones se acepten en menor medida mientras más avancemos en la ejecución de nuestra heurística.solución
+
+\subsection{Aceptación por Umbrales}
+
+La variante del recocido simulado que implementamos aquí usará la técnica de \emph{aceptación por umbrales} (\emph{threshold accepting}), propuesta por Dueck y Scheuer \cite{dueck1990} como una alternativa determinística al criterio probabilístico de Metropolis usado en el recocido simulado clásico. En esta usamos una regla determinística: un vecino $s'$ será aceptado sí y solo sí
+\begin{equation}
+  f(s') \le f(s) + T.
+  \label{eq:threshold}
+\end{equation}
+
+Por ende, la temperatura incide directamente en el número de aceptadas, así como el umbral de "empeoramiento" el cual vemos como aceptable. Podremos observar que para valores altos de $T$ nuestra búsqueda local actúa de manera muy similar a una caminata aleatoria, dado que es muy sencillo moverse a través del vecindario de soluciones – y aún más cuando nuestra solución ya es factible. En el momento en el que $T \to 0$ empezaremos a aceptar solo soluciones que mejoren a partir de la solución actual, esta fase es la que llamamos "explotación".
+
+\subsection{Lotes y Equilibrio térmico}
+Para cada temperatura procesaremos un \emph{lote}: obtendremos una sucesión de vecions de los cuales aceptaremos un número $L$ de ellos (o hasta que lleguemos a un número arbitrario de ejecuciones en el lote a procesar para evitar bucles infinitos en temperaturas muy bajas). Nuestro lote regresará el costo promedio de las soluciones aceptadas. Dentro de la ejecución de cada lote la temperatura se mantendrá constante siempre y cuando este promedio se mantenga decreciente entre lotes consecutivos, esto es lo que llamamos \emph{equilibrio térmico}; en el momento en el que este promedio deje de decrecer multiplicaremos a $T$ por nuestro factor de enfriamiento $\phi$ y repetiremos el proceso hasta que $T$ caiga por debajo de una constante $\varepsilon$ o cuando un lote deje de aceptar soluciones.
+
+\begin{algorithm}[H]
+\caption{ObtenerLote}
+\label{alg:batch}
+\begin{algorithmic}[1]
+\Require temperatura $T$, solución actual $s$, tamaño de lote $L$
+\Ensure costo promedio de las soluciones aceptadas y solución aceptada
+\State $c \gets 0$, $r \gets 0$, $i \gets 0$
+\While{$c < L$ \textbf{and} $i < 100L$}
+  \State $s' \gets \textsc{Vecino}(s)$
+  \If{$f(s') \le f(s) + T$}
+    \State $s \gets s'$, \; $c \gets c + 1$, \; $r \gets r + f(s)$
+    \If{$f(s) < f(s^*)$} \State $s^* \gets s$ \Comment{mejor solucion global} \EndIf
+  \EndIf
+  \State $i \gets i + 1$
+\EndWhile
+\State \Return $r / c$, $s$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{AceptaUmbrales}
+\label{alg:threshold}
+\begin{algorithmic}[1]
+\Require temperatura incial $T$, factor $\phi$, $\varepsilon$, $L$,
+         solucion inicial $s$
+\State $p \gets 0$
+\While{$T > \varepsilon$}
+  \State $q \gets \infty$
+  \While{$p \le q$}
+    \State $q \gets p$
+    \State $p, s \gets \textsc{ObtenerLote}(T, s, L)$
+    \If{no hay solucion aceptada en el lote} \State \Return $s^*$ \EndIf
+  \EndWhile
+  \State $T \gets \phi \, T$
+\EndWhile
+\State \Return $s^*$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Vecindario}
+Un vecino a nuestra solución se obtiene a través de tomar dos vértices distintos de manera estocástica e intercambiando las ciudades que estos representan. Este vecindario es simple, conecta todo el espacio de búsqueda y además nos permite calcular un cambio en el costo en tiempo constante.
+
+\subsection{Barrido}
+Una vez que nuestro recocido termina, de manera opcional podemos \emph{barrer} el vecindario de nuestra solución: buscamos en todo el vecindario de nuestra solución aceptada algún vecino que mejore (por poco que sea) la función de costo, si llegamos a encontrar tal vecino, lo tomamos como nueva solución y repetimos este proceso hasta ya no encontrar ninguno. Este paso nos permitirá llegar al óptimo local del vecindario en caso de que no nos encontremos ahí.
+
+% ----------------------------------------------------------------------------
+\section{Diseño de la Solución}
+\subsection{Código}
+
+El proyecto esta separado en módulos los cuales implementan tanto el I/O como los modelos del proyecto:
+
+\begin{itemize}
+  \item \texttt{io/args}: parser para la línea de comandos, usando \texttt{clap}.
+  \item \texttt{io/instance\_reader}: nos permite leer la instancia a resolver del TSP. Permite leer desde un archivo o directamente como una cadena en la consola de comandos.
+  \item \texttt{io/instance\_writer}: persiste los resultados y el reporte de cada corrida del experimento.
+  \item \texttt{models/db}: conector a SQLite asi como los modelos donde se vacía esta información.
+  \item \texttt{models/city}, \texttt{models/connection}: entidades de base de datos.
+        \texttt{City} implementa la distancia de Haversine
+  \item \texttt{models/solution}: la estructura del \texttt{Tour}, se encarga de construir los parámetros con los que trabajara el problema (matriz de peso, normalizador), así como se encarga de los estados actuales del problema (solución actual, su peso y provee la operación para obtener un vecino)
+  \item \texttt{models/problem}: la estructura de \texttt{TravelSalesmanProblem}, tiene la lógica de la heurística, el bucle de aceptación por umbrales, genera los lotes, guarda y modifica el estado de la temperatura y permite hacer barridos.
+\end{itemize}
+
+\subsection{Flujo de ejecución}
+
+\begin{enumerate}
+  \item Recolecta los parámetros del sistema, se carga cada ciudad y conexiones de la base de datos en memoria.
+  \item Para cada corrida que se haya parametrizado se genera un hilo el cual se encarga de:
+    \begin{enumerate}
+      \item se construye un objeto \texttt{Tour}: se filtran las conexiones relevantes a la instancia suplida,
+            se calcula $d_{\max}$, $N(I)$ y la matriz de peso, se permuta la solución inicial.
+      \item se corre \texttt{accept\_solutions}.
+      \item si la bandera \texttt{--activate-sweep} fue activada, se corre el barrido.
+      \item se escribe el reporte a disco.
+    \end{enumerate}
+\end{enumerate}
+
+% ----------------------------------------------------------------------------
+
+\section{Resultados}
+\subsection{Setup}
+
+Dos instancias del problema fueron resueltas: una con 40 ciudades (\texttt{input-40.tsp}) y otra con 150 ciudades (\texttt{input-150.tsp}). Para la instancia de 40 ciudades se corrieron 10,000 semillas, mientras que para la de 150 ciudades se corrieron aproximadamente 100,000 semillas. La elección de los parámetros de temperatura inicial, factor de enfriamiento y tamaño de lote siguió las recomendaciones prácticas descritas por Minaiev \cite{minaiev2023}, quien discute cómo calibrar estos valores de manera experimental en vez de derivarlos analíticamente. Los parámetros usados se desglosan en la siguiente tabla
+
+\begin{table}[H]
+  \centering
+  \caption{Parámetros}
+  \begin{tabular}{lrrrrr}
+    \toprule
+    Instance & $T_0$ & $\phi$ & $L$ & $\varepsilon$ \\
+    \midrule
+    40 cities  & 50,000 & 0.99 & 500 & 0.000001  \\
+    150 cities & 500,000 & 0.995 & 4000 & 0.000000001\\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Mejores soluciones}
+
+\begin{table}[H]
+  \centering
+  \caption{Mejor costo por instancia}
+  \label{tab:best}
+  \begin{tabular}{lrrlrr}
+    \toprule
+    Instancia & Corridas & Evaluacion &  Semilla \\
+    \midrule
+    40 cities  & 10,000 & 0.263819525596896 & 11818631877859855109 \\
+    150 cities & 100,000 & 0.136506050427962 & 3533037625083682721 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Mapas}
+
+\begin{figure}[H]
+  \centering
+  \figura{path-150.png}{0.85\textwidth}
+  \caption{Mejor recorrido – 150 ciudades}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \figura{path-40.png}{0.85\textwidth}
+  \caption{Mejor recorrido – 40 ciudades}
+\end{figure}
+
+\subsection{Convergencia}
+\begin{figure}[H]
+  \centering
+  \figura{evals-swap-150.png}{0.85\textwidth}
+  \caption{Evaluación de las mejores 25 semillas – Swap (150 ciudades)}
+\end{figure}
+
+Para 150 ciudades, usamos un segundo método de obtener vecinos, el cual es 2-opt, introducido por Croes \cite{croes1958} y popularizado como parte de esquemas de búsqueda local más elaborados por Lin y Kernighan \cite{linkernighan1973}:
+
+modificaremos cuatro aristas del camino y con frecuencia deja cruces en la ruta. El movimiento que hace 2-opt ofrece una alternativa con mejor comportamiento: selecciona dos aristas no adyacentes $(s_i, s_{i+1})$ y $(s_j, s_{j+1})$ con $i < j$, las elimina y reconecta el camino como $(s_i, s_j)$ y $(s_{i+1}, s_{j+1})$. Sobre la permutación esto equivale a invertir el segmento $s_{i+1}, \dots, s_j$:
+\begin{equation}
+  (\dots, s_i, \underbrace{s_{i+1}, \dots, s_j}_{\text{invertido}},
+   s_{j+1}, \dots)
+  \;\longrightarrow\;
+  (\dots, s_i, s_j, \dots, s_{i+1}, s_{j+1}, \dots).
+\end{equation}
+
+Dado esto, corrimos 10 semillas, obteniendo muchos mejores resultados:
+\begin{figure}[H]
+  \centering
+  \figura{evals-2opt-150.png}{0.85\textwidth}
+  \caption{Evaluación de las mejores 10 semillas – 2-opt (150 ciudades)}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \figura{evals-40.png}{0.85\textwidth}
+  \caption{Evaluación de las mejores 25 semillas (40 ciudades)}
+\end{figure}
+
+\section{Conclusión}
+Si bien el modelado e implementación de código fue parte del reto de este proyecto, creo que la parte más interesante fue el momento donde se empezó a experimentar, dado que depende de muchas variables los posibles resultados a encontrar (entre muchos la suerte y vender el alma) lo cual convierte esta segunda etapa en una nueva búsqueda, la cual ya no se centra en construir, sino en explorar nuestras propias implementaciónes y descubrir donde fallan y como mejorarlas. De igual manera creo que una forma de mejorar para futuros proyectos y experimentos es la creación de un pequeño framework de automatización de resultados, donde podamos comparar diferentes parámetros del experimento y con ello automatizar estas mejoras (en una especie de metametaheuristica).
+
+% ----------------------------------------------------------------------------
+\section*{Referencias}
+\addcontentsline{toc}{section}{Referencias}
+\begin{thebibliography}{9}
+
+\bibitem{dantzig1954}
+G.~B. Dantzig, D.~R. Fulkerson, and S.~M. Johnson.
+\newblock Solution of a large-scale traveling-salesman problem.
+\newblock \emph{Journal of the Operations Research Society of America}, 2(4):393--410, 1954.
+
+\bibitem{croes1958}
+G.~A. Croes.
+\newblock A method for solving traveling-salesman problems.
+\newblock \emph{Operations Research}, 6(6):791--812, 1958.
+
+\bibitem{linkernighan1973}
+S.~Lin and B.~W. Kernighan.
+\newblock An effective heuristic algorithm for the traveling-salesman problem.
+\newblock \emph{Operations Research}, 21(2):498--516, 1973.
+
+\bibitem{kirkpatrick1983}
+S.~Kirkpatrick, C.~D. Gelatt, and M.~P. Vecchi.
+\newblock Optimization by simulated annealing.
+\newblock \emph{Science}, 220(4598):671--680, 1983.
+
+\bibitem{cerny1985}
+V.~Černý.
+\newblock Thermodynamical approach to the traveling salesman problem: An efficient simulation algorithm.
+\newblock \emph{Journal of Optimization Theory and Applications}, 45(1):41--51, 1985.
+
+\bibitem{dueck1990}
+G.~Dueck and T.~Scheuer.
+\newblock Threshold accepting: A general purpose optimization algorithm appearing superior to simulated annealing.
+\newblock \emph{Journal of Computational Physics}, 90(1):161--175, 1990.
+
+\bibitem{minaiev2023}
+B.~Minaiev.
+\newblock Converging on simulated annealing.
+\newblock \url{https://bminaiev.github.io/simulated-annealing}, January 2023. Accessed September 2026.
+
+\end{thebibliography}
+
+\end{document}
+

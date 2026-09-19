@@ -98,12 +98,10 @@ impl<'a> InstanceWriter<'a> {
     }
 
     pub fn format_solutions(&self) -> String {
-        let gnu_plot_cmd = String::from("plot '-' using 1:2 with linespoints\n");
-        let mut solutions = String::from("set datafile separator ','\n");
-        solutions.push_str(&gnu_plot_cmd);
-        for (iteration, solution) in self.tsp.accepted_solutions().iter().enumerate() {
+        let mut solutions = String::from("");
+        for (_, solution) in self.tsp.accepted_solutions().iter().enumerate() {
             let cost = self.tsp.tour.calculate_cost(solution);
-            solutions.push_str(&format!("{iteration},{cost:.9}\n"));
+            solutions.push_str(&format!("E:{cost:.15}\n"));
         }
 
         solutions

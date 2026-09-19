@@ -27,16 +27,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let instance: Vec<usize> = instance_reader.get_parsed_instance(&cities);
 
     let n_runs = args.threads.unwrap_or_else(|| 1);
-    let concurrency = args
-        .concurrency
-        .unwrap_or_else(|| thread::available_parallelism().map(|n| n.get()).unwrap_or(1))
-        .max(1);
     let started_at = Local::now();
     let (cities, instance, connections) = (&cities, &instance, &connections);
 
     let mut results: Vec<Result<(), String>> = Vec::with_capacity(n_runs);
 
-    for batch in (0..n_runs).collect::<Vec<usize>>().chunks(concurrency) {
+    for batch in (0..n_runs).collect::<Vec<usize>>().chunks(18) {
         let batch_results: Vec<Result<(), String>> = thread::scope(|scope| {
             let handles: Vec<_> = batch
                 .iter()
