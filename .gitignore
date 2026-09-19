@@ -2,4 +2,6 @@
 *.sql
 *.db
 *.tsp
+*.txt
+*.sh
 /results
